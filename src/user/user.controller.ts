@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Query,
   Param,
   ParseIntPipe,
   Patch,
@@ -10,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CreateUserDto } from './dto/create-user.dto.js';
+import { FindUsersQueryDto } from './dto/find-users-query.dto.js';
+import { PaginatedUsersResponse } from './dto/paginated-users.response.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UserService } from './user.service.js';
 
@@ -30,11 +33,14 @@ export class UserController {
     return this.userService.create(createUserDto);
   }
 
-  /** GET /users — список всех пользователей. */
+  /**
+   * GET /users — список через QueryBuilder.
+   * Пример: ?page=1&limit=10&name=ali&sortBy=name&sortOrder=ASC
+   */
   @Get()
-  @ApiOperation({ summary: 'List users' })
-  findAll() {
-    return this.userService.findAll();
+  @ApiOperation({ summary: 'List users with posts (QueryBuilder)' })
+  findAll(@Query() query: FindUsersQueryDto): Promise<PaginatedUsersResponse> {
+    return this.userService.findAll(query);
   }
 
   /** GET /users/:id — один пользователь; ParseIntPipe проверяет, что id — число. */

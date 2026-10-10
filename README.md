@@ -1,110 +1,67 @@
 # users-postgres
 
-Небольшой NestJS API для пользователей. Данные хранятся в **SQLite** через **TypeORM**. Swagger UI: `/api`.
+NestJS API для **users** и **posts** с **PostgreSQL** и **TypeORM**. Схема БД управляется **миграциями** (`synchronize: false`). Swagger UI: `/api`.
 
 ## Быстрый старт
 
 ```bash
 npm install
 cp .env.example .env
+docker compose up -d
+npm run migration:run
 npm run start:dev
 ```
 
 - API: `http://localhost:3000`
 - Swagger: `http://localhost:3000/api`
 
-Переменные окружения (см. `.env.example`):
+### Переменные окружения
 
 | Переменная | Описание |
 |------------|----------|
-| `PORT` | Порт HTTP (по умолчанию `3000`) |
-| `DB_DATABASE` | Путь к файлу SQLite (по умолчанию `data.sqlite`) |
-| `DB_SYNCHRONIZE` | `true` — создавать/обновлять таблицы по entity при старте (только для разработки) |
+| `PORT` | HTTP-порт (по умолчанию `3000`) |
+| `DB_HOST` | Хост PostgreSQL |
+| `DB_PORT` | Порт PostgreSQL (`5432`) |
+| `DB_USERNAME` | Пользователь БД |
+| `DB_PASSWORD` | Пароль |
+| `DB_DATABASE` | Имя базы |
 
-После первого запуска в корне проекта появится файл `data.sqlite`.
+## Миграции
 
-## Как здесь работает TypeORM
-
-**TypeORM** — это ORM: она связывает классы TypeScript с таблицами в БД, а строки — с объектами. Ручной SQL почти не нужен; используется **репозиторий** (`save`, `find`, `remove` и т.д.).
-
-### 1. Entity — схема таблицы
-
-**Entity** описывает одну таблицу. Пример: класс `User` → таблица `users`.
-
-```typescript
-@Entity('users')
-export class User {
-  @PrimaryGeneratedColumn()
-  id: number;
-
-  @Column({ type: 'varchar', length: 100 })
-  name: string;
-
-  @Column({ type: 'varchar', length: 255, unique: true })
-  email: string;
-}
+```bash
+npm run migration:generate   # после изменения entity → новый файл в src/database/migrations/
+npm run migration:run          # применить миграции
+npm run migration:revert       # откат последней миграции
 ```
 
-Декораторы задают TypeORM имена колонок, типы, ключи и ограничения. Entity не содержит HTTP-логику — только модель данных для БД.
+Проверка внешнего ключа `posts.author_id → users.id`:
 
-### 2. Глобальное подключение — `AppModule`
+```bash
+docker exec users-postgres-postgres-1 psql -U postgres -d users -c "\d posts"
+```
 
-`TypeOrmModule.forRootAsync()` открывает одно подключение ко всему приложению. Настройки берутся из `ConfigService` / `.env`:
+## Связь User ↔ Post
 
-- `better-sqlite3` — драйвер SQLite;
-- `autoLoadEntities: true` — подхватывает entity, зарегистрированные в feature-модулях;
-- `synchronize` — при `true` TypeORM при старте создаёт или меняет таблицы по entity (удобно для обучения и локальной разработки; в production обычно используют миграции).
+- `User` — `OneToMany` → `posts`
+- `Post` — `ManyToOne` → `author` (`author_id`, FK с `ON DELETE CASCADE`)
 
-### 3. Feature-модуль — регистрация entity
+## QueryBuilder, пагинация, N+1
 
-`TypeOrmModule.forFeature([User])` в `UserModule` позволяет Nest внедрять `Repository<User>` в сервисы этого модуля.
+`GET /users` — список пользователей с постами:
 
-### 4. Сервис — CRUD через репозиторий
+- `leftJoinAndSelect('user.posts', 'post')`
+- фильтр по имени: `?name=ali`
+- сортировка: `?sortBy=name&sortOrder=ASC`
+- пагинация: `?page=1&limit=10`
 
-`UserService` получает `Repository<User>` через `@InjectRepository(User)`:
+Ответ: `{ data: User[], meta: { page, limit, total, totalPages } }`.
 
-| Метод | Что делает TypeORM |
-|-------|---------------------|
-| `create(dto)` + `save()` | INSERT |
-| `find()` / `findOne()` | SELECT |
-| `merge()` + `save()` | UPDATE |
-| `remove()` | DELETE |
-
-Типичное создание: DTO из контроллера → `repository.create(dto)` (объект в памяти) → `repository.save(user)` (запись в SQLite).
-
-### 5. Entity и DTO — в чём разница
-
-| | Entity | DTO |
-|---|--------|-----|
-| Назначение | Хранение в БД | Вход/выход API |
-| Где лежит | `entities/` | `dto/` |
-| Валидация | По желанию | `class-validator` в контроллере |
-
-Контроллер проверяет **DTO**, сервис сохраняет **entity**. Формат API отделён от структуры таблицы.
-
-### Путь запроса (POST `/users`)
-
-1. Клиент отправляет JSON `{ "name", "email" }`.
-2. `ValidationPipe` проверяет `CreateUserDto`.
-3. `UserService.create()` → `repository.create` + `save`.
-4. TypeORM выполняет `INSERT INTO users ...`.
-5. В ответе — сохранённый `User` (с `id`) в JSON.
-
-### Что посмотреть в коде
-
-| Файл | О чём |
-|------|--------|
-| `src/user/entities/user.entity.ts` | Описание таблицы |
-| `src/app.module.ts` | Подключение к БД |
-| `src/user/user.module.ts` | Регистрация entity |
-| `src/user/user.service.ts` | Работа с репозиторием |
-
-Подробнее: [docs/typeorm-i-entity.md](./docs/typeorm-i-entity.md).
+Пример N+1 «до/после»: [docs/n-plus-one.md](./docs/n-plus-one.md) и `UserService.findAllWithPostsNaive()` vs `findAll()`.
 
 ## Скрипты
 
 ```bash
-npm run start:dev   # режим с перезапуском при изменениях
-npm run test        # unit-тесты
-npm run test:e2e    # e2e-тесты
+npm run start:dev
+npm run test
+npm run test:e2e
 ```

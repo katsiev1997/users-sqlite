@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Post } from '../post/entities/post.entity.js';
 import { User } from './entities/user.entity.js';
 import { UserService } from './user.service.js';
 
@@ -19,6 +20,13 @@ describe('UserService', () => {
             findOne: vi.fn(),
             merge: vi.fn(),
             remove: vi.fn(),
+            createQueryBuilder: vi.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(Post),
+          useValue: {
+            find: vi.fn(),
           },
         },
       ],

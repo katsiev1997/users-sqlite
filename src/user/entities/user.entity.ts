@@ -1,21 +1,26 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import type { Post } from '../../post/entities/post.entity.js';
 
 /**
- * Entity (сущность) — класс-модель одной таблицы в БД.
- * TypeORM по декораторам создаёт таблицу и маппит строки ↔ объекты User.
- * Подробнее: docs/typeorm-i-entity.md
+ * Entity (сущность) — класс-модель таблицы users.
+ * TypeORM маппит строки БД ↔ объекты User; схема таблицы задаётся миграциями.
  */
 @Entity('users')
 export class User {
-  /** Первичный ключ; SQLite сам увеличивает id для каждой новой строки. */
   @PrimaryGeneratedColumn()
   id: number;
 
-  /** @Column — обычное поле таблицы; type/length задают тип колонки в SQL. */
   @Column({ type: 'varchar', length: 100 })
   name: string;
 
-  /** unique: true — два пользователя не могут иметь один и тот же email. */
+  /** unique — ограничение UNIQUE в PostgreSQL на колонку email. */
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
+
+  /**
+   * OneToMany — «обратная» сторона связи; физически FK только в таблице posts.
+   * Строковое имя 'Post' вместо () => Post — без циклического import в ESM.
+   */
+  @OneToMany('Post', 'author')
+  posts: Post[];
 }

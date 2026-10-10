@@ -4,23 +4,29 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 
-/** Точка входа: создаём HTTP-приложение и слушаем порт. */
+/**
+ * Точка входа приложения.
+ * NestFactory поднимает DI-контейнер из AppModule и HTTP-сервер Express под капотом.
+ */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
-  // ValidationPipe проверяет тело/query-параметры по декораторам class-validator в DTO
+  // Глобальная валидация: любой @Body() / @Query() с DTO проверяется class-validator
   app.useGlobalPipes(
     new ValidationPipe({
-      transform: true, // строки из JSON приводятся к типам полей DTO (например, число)
-      whitelist: true, // лишние поля в JSON отбрасываются
-      forbidNonWhitelisted: true, // неизвестные поля → 400 Bad Request
+      transform: true, // query ?page=1 → number (нужен @Type в DTO)
+      whitelist: true, // поля без декораторов в DTO не попадут в объект
+      forbidNonWhitelisted: true, // лишние поля в JSON → 400 Bad Request
     }),
   );
 
+  // OpenAPI-документация; UI доступен по /api
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Users API')
-    .setDescription('CRUD API for users')
+    .setDescription(
+      'CRUD пользователей и постов (PostgreSQL, миграции, QueryBuilder)',
+    )
     .setVersion('1.0')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
